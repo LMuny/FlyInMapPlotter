@@ -1,27 +1,27 @@
 # Fly-in Map Plotter
 
-Éditeur visuel de cartes pour le projet Fly-in : place des hubs, relie-les, vérifie la carte et exporte le fichier `.txt`.
+Visual map editor for the Fly-in project: place hubs, connect them, check the map and export the `.txt` file.
 
-## Lancer
-Double-clique sur `fly-in-map-plotter.html`. Aucune installation ni connexion Internet nécessaire.
+## Run
+Double-click `fly-in-map-plotter.html`. No installation or internet connection needed.
 
-Ce fichier contient toute l'application : tu peux le déplacer ou l'envoyer seul. Ta carte en cours est enregistrée automatiquement dans le navigateur.
+This file contains the whole app, so you can move it or send it on its own. Your current map is saved automatically in the browser.
 
-## Démarrer une carte
-1. Clique sur **New**, puis sur la grille : le premier hub devient le départ, le deuxième l'arrivée.
-2. Appuie sur **L** et glisse d'un hub à l'autre pour les relier.
-3. Appuie sur **Ctrl+S** pour enregistrer le `.txt`.
+## Start a map
+1. Click **New**, then click the grid: the first hub becomes the start and the second becomes the end.
+2. Press **L** and drag from one hub to another to connect them.
+3. Press **Ctrl+S** to save the `.txt` file.
 
-Pour ouvrir une carte existante, dépose le fichier `.txt` sur la fenêtre ou colle son contenu avec **Ctrl+V**.
+To open an existing map, drop its `.txt` file onto the window or paste its contents with **Ctrl+V**.
 
-## Raccourcis
-V sélection · H ajouter un hub · L connecter · Suppr effacer · flèches déplacer · Ctrl+Z / Ctrl+Y annuler / rétablir · Ctrl+S enregistrer · Ctrl+O importer · Ctrl+V coller une carte
+## Shortcuts
+V select · H add a hub · L connect · Delete remove · arrow keys move · Ctrl+Z / Ctrl+Y undo / redo · Ctrl+S save · Ctrl+O import · Ctrl+V paste a map
 
-## Modifier le code
-- `index.html` — structure de la page
-- `css/style.css` — style (thème clair / sombre automatique)
-- `js/core.js` — logique de la carte : parsing, export, vérifications, plus court chemin
-- `js/app.js` — interface : dessin, outils, inspecteur, import / export
-- `build.py` — régénère `fly-in-map-plotter.html`
+## Change the code
+- `index.html` — page structure
+- `css/style.css` — styling (automatic light / dark theme)
+- `js/core.js` — map logic: parsing, export, checks, shortest path
+- `js/app.js` — interface: drawing, tools, inspector, import / export
+- `build.py` — regenerates `fly-in-map-plotter.html`
 
-`index.html` s'ouvre directement pendant le développement. Après une modification, lance `python3 build.py` pour mettre à jour le fichier unique.
+`index.html` opens directly during development. After making a change, run `python3 build.py` to update the single file.
