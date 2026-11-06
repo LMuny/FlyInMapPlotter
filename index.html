@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fly-in Map Plotter</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Fly-in Map Plotter</h1>
+    <label class="field"><span class="label">Map</span><input type="text" id="mapTitle" spellcheck="false"></label>
+    <label class="field"><span class="label">nb_drones</span><input type="number" class="mono" id="nbDrones" min="1" step="1"></label>
+    <span class="spacer"></span>
+    <div class="group">
+      <button class="btn" id="undo" type="button" title="Ctrl+Z">Undo</button>
+      <button class="btn" id="redo" type="button" title="Ctrl+Y">Redo</button>
+      <button class="btn" id="newMap" type="button">New</button>
+      <button class="btn" id="openImport" type="button" title="Ctrl+O, or drop a .txt file anywhere, or press Ctrl+V to paste a map">Import</button>
+    </div>
+  </header>
+
+  <main class="work">
+    <section class="chart" aria-label="Map chart">
+      <svg id="svg" role="application" aria-label="Map editor. Use the tool buttons to add hubs and connections."></svg>
+      <div class="rail" role="toolbar" aria-label="Tools">
+        <button type="button" id="tool-select" data-tool="select">Select <kbd>V</kbd></button>
+        <button type="button" id="tool-hub" data-tool="hub">Add hub <kbd>H</kbd></button>
+        <button type="button" id="tool-link" data-tool="link">Connect <kbd>L</kbd></button>
+      </div>
+      <div class="zoom">
+        <button type="button" id="zoomOut" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+        <button type="button" id="fit">Fit</button>
+      </div>
+      <div class="status"><span id="status" aria-live="polite"></span><span id="cursor"></span></div>
+    </section>
+
+    <aside class="side">
+      <section class="card" id="inspector" aria-label="Selected item"></section>
+
+      <section class="card" aria-label="Map checks">
+        <div class="head"><h2>Checks</h2><span class="pill" id="verdict"></span></div>
+        <ul class="checks" id="checks"></ul>
+        <dl class="stats">
+          <div><dt class="label">Hubs</dt><dd id="statHubs"></dd></div>
+          <div><dt class="label">Links</dt><dd id="statLinks"></dd></div>
+          <div><dt class="label">Solo turns</dt><dd id="statTurns"></dd></div>
+        </dl>
+        <p class="note">Solo turns is the shortest route for one drone, drawn on the chart. A restricted zone counts as 2 turns, and blocked zones are skipped.</p>
+        <p id="routeText" class="note"></p>
+      </section>
+
+      <section class="card" aria-label="Map file">
+        <div class="head">
+          <h2>Map file</h2>
+          <div class="group">
+            <button class="btn" id="copy" type="button">Copy</button>
+            <button class="btn primary" id="save" type="button" title="Ctrl+S" hidden>Save .txt</button>
+          </div>
+        </div>
+        <textarea id="output" readonly spellcheck="false" aria-label="Generated map file"></textarea>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="importModal" hidden role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <div class="card">
+    <h2 id="importTitle">Import a map</h2>
+    <p class="note">Choose a .txt file to load it right away, or paste a map below. Your current map stays until the import succeeds, and Undo brings it back afterwards.</p>
+    <input type="file" id="importFile" accept=".txt,text/plain">
+    <textarea id="importText" spellcheck="false" aria-label="Map text to import" placeholder="nb_drones: 2&#10;start_hub: a 0 0&#10;end_hub: b 1 0&#10;connection: a-b"></textarea>
+    <p id="importError" hidden></p>
+    <div class="group">
+      <button class="btn primary" id="importGo" type="button">Load map</button>
+      <button class="btn" id="importCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

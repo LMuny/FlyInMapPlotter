@@ -1,0 +1,1165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fly-in Map Plotter</title>
+<style>
+/* Layout: a macOS-style editor window. The map canvas fills the space like Apple Maps, with floating frosted controls; a grouped inspector sits on the right. */
+:root {
+  --bg: #f2f2f7; --material: rgba(255, 255, 255, .78); --material-solid: #ffffff; --canvas: #fbfbfd;
+  --label: #1d1d1f; --secondary: rgba(60, 60, 67, .62); --tertiary: rgba(60, 60, 67, .3);
+  --separator: rgba(60, 60, 67, .14); --fill: rgba(120, 120, 128, .12); --fill-hover: rgba(120, 120, 128, .2);
+  --grid: rgba(60, 60, 67, .07); --axis: rgba(60, 60, 67, .2);
+  --accent: #007aff; --accent-tint: rgba(0, 122, 255, .12); --on-accent: #ffffff;
+  --restricted: #ff2d55; --priority: #34c759; --blocked: #8e8e93; --route: #007aff; --route-casing: #ffffff;
+  --error: #ff3b30; --warn: #ff9500; --ok: #34c759;
+  --thumb: #ffffff; --hub-stroke: #ffffff; --hub-empty: #c7c7cc;
+  --shadow: 0 0 0 .5px rgba(0, 0, 0, .06), 0 2px 6px rgba(0, 0, 0, .04), 0 8px 24px rgba(0, 0, 0, .06);
+  --shadow-float: 0 0 0 .5px rgba(0, 0, 0, .08), 0 4px 16px rgba(0, 0, 0, .1);
+  --text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --material: rgba(30, 30, 32, .74); --material-solid: #1c1c1e; --canvas: #111113;
+    --label: #f5f5f7; --secondary: rgba(235, 235, 245, .6); --tertiary: rgba(235, 235, 245, .3);
+    --separator: rgba(84, 84, 88, .55); --fill: rgba(118, 118, 128, .24); --fill-hover: rgba(118, 118, 128, .34);
+    --grid: rgba(235, 235, 245, .05); --axis: rgba(235, 235, 245, .16);
+    --accent: #0a84ff; --accent-tint: rgba(10, 132, 255, .2); --on-accent: #ffffff;
+    --restricted: #ff375f; --priority: #30d158; --blocked: #8e8e93; --route: #0a84ff; --route-casing: #0b3a73;
+    --error: #ff453a; --warn: #ff9f0a; --ok: #30d158;
+    --thumb: #636366; --hub-stroke: #f5f5f7; --hub-empty: #48484a;
+    --shadow: 0 0 0 .5px rgba(255, 255, 255, .08), 0 8px 24px rgba(0, 0, 0, .4);
+    --shadow-float: 0 0 0 .5px rgba(255, 255, 255, .1), 0 6px 20px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --material: rgba(30, 30, 32, .74); --material-solid: #1c1c1e; --canvas: #111113;
+  --label: #f5f5f7; --secondary: rgba(235, 235, 245, .6); --tertiary: rgba(235, 235, 245, .3);
+  --separator: rgba(84, 84, 88, .55); --fill: rgba(118, 118, 128, .24); --fill-hover: rgba(118, 118, 128, .34);
+  --grid: rgba(235, 235, 245, .05); --axis: rgba(235, 235, 245, .16);
+  --accent: #0a84ff; --accent-tint: rgba(10, 132, 255, .2); --on-accent: #ffffff;
+  --restricted: #ff375f; --priority: #30d158; --blocked: #8e8e93; --route: #0a84ff; --route-casing: #0b3a73;
+  --error: #ff453a; --warn: #ff9f0a; --ok: #30d158;
+  --thumb: #636366; --hub-stroke: #f5f5f7; --hub-empty: #48484a;
+  --shadow: 0 0 0 .5px rgba(255, 255, 255, .08), 0 8px 24px rgba(0, 0, 0, .4);
+  --shadow-float: 0 0 0 .5px rgba(255, 255, 255, .1), 0 6px 20px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--label); font-family: var(--text); font-size: 14px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 1px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px;
+  padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Toolbar */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.brand { font-weight: 700; font-size: 20px; letter-spacing: -.02em; margin: 0; white-space: nowrap; }
+.field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.label { font-size: 12px; font-weight: 500; color: var(--secondary); white-space: nowrap; }
+.top .spacer { flex: 1 1 0; }
+input[type="text"], input[type="number"], select, textarea {
+  background: var(--material-solid); border: 0; box-shadow: 0 0 0 .5px var(--separator), 0 1px 2px rgba(0, 0, 0, .04);
+  border-radius: 8px; padding: 6px 10px; min-width: 0; transition: box-shadow .15s; }
+input[type="text"]:focus, input[type="number"]:focus, textarea:focus { outline: none; box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint); }
+input:disabled { opacity: .4; }
+input.mono, textarea { font-family: var(--mono); font-size: 12.5px; }
+input.bad, input.bad:focus { box-shadow: 0 0 0 1px var(--error), 0 0 0 4px color-mix(in srgb, var(--error) 18%, transparent); }
+#mapTitle { width: 220px; max-width: 100%; }
+#nbDrones { width: 70px; }
+input[type="file"] { font-size: 13px; color: var(--secondary); }
+input[type="file"]::file-selector-button { font: 500 13px var(--text); color: var(--accent); background: var(--fill); border: 0; border-radius: 8px; padding: 6px 12px; margin-right: 10px; cursor: pointer; }
+
+.btn { font-weight: 500; font-size: 13px; background: var(--fill); border: 0; border-radius: 8px; padding: 6px 13px; cursor: pointer; white-space: nowrap;
+  transition: background .15s, transform .1s; }
+.btn:hover:not(:disabled) { background: var(--fill-hover); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { opacity: .35; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
+#delItem { color: var(--error); }
+.group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Canvas */
+.work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; min-height: 0; }
+.chart { position: relative; background: var(--canvas); border-radius: 14px; overflow: hidden; min-height: 0; box-shadow: var(--shadow); }
+#svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.rail, .zoom, .status > * { background: var(--material); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--shadow-float); }
+.rail { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 2px; padding: 5px; border-radius: 12px; }
+.rail button, .zoom button { display: flex; align-items: center; gap: 12px; background: transparent; border: 0; border-radius: 8px; padding: 6px 10px;
+  cursor: pointer; font-weight: 500; font-size: 13px; transition: background .15s; }
+.rail button:hover, .zoom button:hover { background: var(--fill); }
+.rail button kbd { font-family: var(--text); font-size: 11px; color: var(--tertiary); margin-left: auto; }
+.rail button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.rail button[aria-pressed="true"] kbd { color: rgba(255, 255, 255, .7); }
+.zoom { position: absolute; top: 12px; right: 12px; display: flex; gap: 0; padding: 4px; border-radius: 12px; }
+.zoom button { padding: 5px 11px; font-size: 16px; font-weight: 400; }
+.zoom #fit { font-size: 13px; font-weight: 500; }
+.status { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+  pointer-events: none; font-size: 12px; color: var(--secondary); }
+.status > * { padding: 5px 11px; border-radius: 999px; }
+.status > *:empty { display: none; }
+#cursor { font-family: var(--rounded); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#status.flash { color: var(--label); }
+
+/* Inspector */
+.side { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.card { background: var(--material-solid); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
+.card h2 { font-weight: 600; font-size: 15px; letter-spacing: -.01em; margin: 0; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stack { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stack input, .stack select { width: 100%; }
+.seg { display: flex; flex-wrap: wrap; gap: 0; padding: 2px; border-radius: 9px; background: var(--fill); }
+.seg button { flex: 1 1 auto; background: transparent; border: 0; border-radius: 7px; padding: 5px 8px; cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: background .2s, box-shadow .2s; }
+.seg button[aria-pressed="true"] { background: var(--thumb); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .04), 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04); font-weight: 600; }
+.note { font-size: 12.5px; color: var(--secondary); margin: 0; line-height: 1.45; }
+.note.mono { font-family: var(--mono); color: var(--label); font-size: 13px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; border: 0; box-shadow: inset 0 0 0 1px var(--separator); cursor: pointer; padding: 0; transition: transform .12s; }
+.swatch:hover { transform: scale(1.12); }
+.swatch.none { background: var(--fill); font-size: 12px; line-height: 1; color: var(--secondary); }
+.legend { display: grid; grid-template-columns: 28px 1fr; gap: 10px 10px; align-items: center; margin: 0; font-size: 13px; }
+.legend svg { width: 26px; height: 26px; display: block; overflow: visible; }
+.legend dd { margin: 0; color: var(--secondary); }
+.legend b { font-weight: 500; color: var(--label); }
+
+.pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.err { color: var(--error); background: color-mix(in srgb, var(--error) 12%, transparent); }
+.pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 10px; overflow: hidden; background: var(--fill); }
+.checks li + li { border-top: .5px solid var(--separator); }
+.checks button { display: grid; grid-template-columns: 50px 1fr; gap: 8px; width: 100%; text-align: left; background: transparent; border: 0; padding: 8px 10px; font-size: 13px; }
+.checks button.link { cursor: pointer; }
+.checks button.link:hover { background: var(--fill); }
+.sev { font-size: 12px; font-weight: 600; padding-top: 1px; }
+.sev.err { color: var(--error); } .sev.warn { color: var(--warn); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.stats div { display: flex; flex-direction: column; gap: 0; padding: 10px 12px; border-radius: 10px; background: var(--fill); }
+.stats dd { margin: 0; font-family: var(--rounded); font-weight: 600; font-size: 26px; line-height: 1.15; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stats div:last-child dd { color: var(--accent); }
+.stats dt { order: 2; font-size: 12px; }
+#routeText { font-size: 13px; color: var(--label); overflow-wrap: anywhere; padding: 10px 12px; border-radius: 10px; background: var(--accent-tint); }
+#output { width: 100%; height: 220px; resize: vertical; white-space: pre; overflow: auto; line-height: 1.6; background: var(--bg); box-shadow: none; }
+
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, .28); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; z-index: 20;
+  padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); }
+.modal .card { width: 540px; max-width: 100%; max-height: 100%; overflow: auto; padding: 20px; border-radius: 16px;
+  box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1), 0 24px 70px rgba(0, 0, 0, .3); animation: pop .22s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes pop { from { transform: scale(.94); opacity: 0; } }
+.modal h2 { font-size: 17px; }
+.modal .group { justify-content: flex-end; flex-direction: row-reverse; }
+#importText { width: 100%; height: 240px; white-space: pre; background: var(--bg); box-shadow: none; }
+#importError { color: var(--error); font-size: 13px; margin: 0; }
+body.dropping .chart::after { content: "Drop to open this map"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--canvas)); color: var(--accent); font-size: 17px; font-weight: 600; pointer-events: none; }
+
+/* Map drawing */
+.g-minor { stroke: var(--grid); stroke-width: 1; }
+.g-axis { stroke: var(--axis); stroke-width: 1; }
+.g-tick { fill: var(--tertiary); font: 500 10px var(--rounded); }
+.c-line { stroke: var(--secondary); fill: none; stroke-linecap: round; opacity: .55; }
+.c-line.toblocked { stroke-dasharray: 2 6; opacity: .35; }
+.c-line.sel { stroke: var(--accent); opacity: 1; }
+.c-route { stroke: var(--route-casing); fill: none; stroke-linecap: round; pointer-events: none; }
+.c-flow { stroke: var(--route); fill: none; stroke-linecap: round; pointer-events: none; }
+.c-hit { stroke: transparent; stroke-width: 18; fill: none; cursor: pointer; pointer-events: stroke; }
+.rubber { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 1 6; stroke-linecap: round; pointer-events: none; }
+.halo { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 2; }
+.h-body { stroke: var(--hub-stroke); stroke-width: 2.5; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .25)); }
+.h-body.none { fill: var(--hub-empty); }
+.h-body.blocked { opacity: .55; }
+.h-ring { fill: none; stroke: var(--label); stroke-width: 1.5; opacity: .35; }
+.h-restrict { fill: none; stroke: var(--restricted); stroke-width: 1.5; stroke-dasharray: 2 3; stroke-linecap: round; }
+.h-x { stroke: var(--hub-stroke); stroke-width: 2.5; stroke-linecap: round; }
+.h-name { font: 500 11px var(--text); fill: var(--label); paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round; text-anchor: middle; }
+.h-role { font: 700 9.5px var(--text); letter-spacing: .06em; fill: var(--accent); paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round; text-anchor: middle; }
+.badge { font: 600 10px var(--rounded); fill: var(--secondary); paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round; text-anchor: middle; }
+.badge.turns { fill: var(--restricted); }
+.hub-g { cursor: grab; }
+.empty { font: 500 14px var(--text); fill: var(--secondary); text-anchor: middle; }
+
+@media (prefers-reduced-motion: reduce) { .modal .card { animation: none; } }
+@media (max-width: 860px) {
+  html, body { height: auto; }
+  .app { height: auto; }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .chart { height: 64vh; min-height: 340px; }
+  .side { overflow: visible; }
+  .rail button kbd { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Fly-in Map Plotter</h1>
+    <label class="field"><span class="label">Map</span><input type="text" id="mapTitle" spellcheck="false"></label>
+    <label class="field"><span class="label">nb_drones</span><input type="number" class="mono" id="nbDrones" min="1" step="1"></label>
+    <span class="spacer"></span>
+    <div class="group">
+      <button class="btn" id="undo" type="button" title="Ctrl+Z">Undo</button>
+      <button class="btn" id="redo" type="button" title="Ctrl+Y">Redo</button>
+      <button class="btn" id="newMap" type="button">New</button>
+      <button class="btn" id="openImport" type="button" title="Ctrl+O, or drop a .txt file anywhere, or press Ctrl+V to paste a map">Import</button>
+    </div>
+  </header>
+
+  <main class="work">
+    <section class="chart" aria-label="Map chart">
+      <svg id="svg" role="application" aria-label="Map editor. Use the tool buttons to add hubs and connections."></svg>
+      <div class="rail" role="toolbar" aria-label="Tools">
+        <button type="button" id="tool-select" data-tool="select">Select <kbd>V</kbd></button>
+        <button type="button" id="tool-hub" data-tool="hub">Add hub <kbd>H</kbd></button>
+        <button type="button" id="tool-link" data-tool="link">Connect <kbd>L</kbd></button>
+      </div>
+      <div class="zoom">
+        <button type="button" id="zoomOut" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+        <button type="button" id="fit">Fit</button>
+      </div>
+      <div class="status"><span id="status" aria-live="polite"></span><span id="cursor"></span></div>
+    </section>
+
+    <aside class="side">
+      <section class="card" id="inspector" aria-label="Selected item"></section>
+
+      <section class="card" aria-label="Map checks">
+        <div class="head"><h2>Checks</h2><span class="pill" id="verdict"></span></div>
+        <ul class="checks" id="checks"></ul>
+        <dl class="stats">
+          <div><dt class="label">Hubs</dt><dd id="statHubs"></dd></div>
+          <div><dt class="label">Links</dt><dd id="statLinks"></dd></div>
+          <div><dt class="label">Solo turns</dt><dd id="statTurns"></dd></div>
+        </dl>
+        <p class="note">Solo turns is the shortest route for one drone, drawn on the chart. A restricted zone counts as 2 turns, and blocked zones are skipped.</p>
+        <p id="routeText" class="note"></p>
+      </section>
+
+      <section class="card" aria-label="Map file">
+        <div class="head">
+          <h2>Map file</h2>
+          <div class="group">
+            <button class="btn" id="copy" type="button">Copy</button>
+            <button class="btn primary" id="save" type="button" title="Ctrl+S" hidden>Save .txt</button>
+          </div>
+        </div>
+        <textarea id="output" readonly spellcheck="false" aria-label="Generated map file"></textarea>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div class="modal" id="importModal" hidden role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <div class="card">
+    <h2 id="importTitle">Import a map</h2>
+    <p class="note">Choose a .txt file to load it right away, or paste a map below. Your current map stays until the import succeeds, and Undo brings it back afterwards.</p>
+    <input type="file" id="importFile" accept=".txt,text/plain">
+    <textarea id="importText" spellcheck="false" aria-label="Map text to import" placeholder="nb_drones: 2&#10;start_hub: a 0 0&#10;end_hub: b 1 0&#10;connection: a-b"></textarea>
+    <p id="importError" hidden></p>
+    <div class="group">
+      <button class="btn primary" id="importGo" type="button">Load map</button>
+      <button class="btn" id="importCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Map logic with no page access: read, write and check the Fly-in format. */
+const ZONES = ["normal", "blocked", "restricted", "priority"];
+const META_ERR = (line, msg) => ({ ok: false, line, msg });
+const isInt = (v) => /^[+-]?\d+$/.test(String(v).trim());
+const isPosInt = (v) => isInt(v) && Number(v) > 0;
+
+function parseMeta(text, allowed, ignored) {
+  if (!(text.startsWith("[") && text.endsWith("]"))) return { error: "metadata must be inside [...]" };
+  const out = {};
+  for (const tag of text.slice(1, -1).split(/\s+/).filter(Boolean)) {
+    const at = tag.indexOf("=");
+    const key = at < 0 ? tag : tag.slice(0, at);
+    const value = at < 0 ? "" : tag.slice(at + 1);
+    if (!key || !value) return { error: `'${tag}' should be key=value` };
+    if (ignored.includes(key)) continue;
+    if (!allowed.includes(key)) return { error: `unknown metadata tag '${key}'` };
+    if (key in out) return { error: `tag '${key}' is given twice` };
+    if ((key === "max_drones" || key === "max_link_capacity") && !isPosInt(value)) return { error: `${key} must be a positive integer` };
+    if (key === "zone" && !ZONES.includes(value)) return { error: `zone must be one of ${ZONES.join(", ")}` };
+    out[key] = value;
+  }
+  return { meta: out };
+}
+
+function parseMap(text) {
+  const lines = [];
+  let title = "";
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (line.startsWith("#") && !lines.length && !title) title = line.replace(/^#+\s*/, "");
+    if (line && !line.startsWith("#")) lines.push([i + 1, line]);
+  });
+  if (!lines.length) return META_ERR(null, "the map is empty");
+  const [firstNo, first] = lines[0];
+  const firstAt = first.indexOf(":");
+  if (firstAt < 0 || first.slice(0, firstAt).trim() !== "nb_drones") return META_ERR(firstNo, "the first line must be nb_drones: <number>");
+  const nb = first.slice(firstAt + 1).trim();
+  if (!isPosInt(nb)) return META_ERR(firstNo, "nb_drones must be a positive integer");
+
+  const map = { title, nb: Number(nb), hubs: [], conns: [], nextId: 1 };
+  const byName = new Map();
+  const pairs = new Set();
+  let hasStart = false, hasEnd = false;
+  for (const [no, line] of lines.slice(1)) {
+    const at = line.indexOf(":");
+    const prefix = (at < 0 ? line : line.slice(0, at)).trim();
+    const rest = at < 0 ? "" : line.slice(at + 1).trim();
+    if (prefix === "start_hub" || prefix === "end_hub" || prefix === "hub") {
+      const m = rest.match(/^(\S+)\s+(\S+)\s+(\S+)(?:\s+(.*))?$/);
+      if (!m) return META_ERR(no, "expected <name> <x> <y> [metadata]");
+      const [, name, x, y, metaText] = m;
+      if (name.includes("-")) return META_ERR(no, `hub name '${name}' must not contain a dash`);
+      if (byName.has(name)) return META_ERR(no, `duplicate hub name '${name}'`);
+      if (!isInt(x) || !isInt(y)) return META_ERR(no, "x and y must be integers");
+      const role = prefix === "start_hub" ? "start" : prefix === "end_hub" ? "end" : "hub";
+      if (role === "start" && hasStart) return META_ERR(no, "there must be exactly one start_hub");
+      if (role === "end" && hasEnd) return META_ERR(no, "there must be exactly one end_hub");
+      hasStart = hasStart || role === "start";
+      hasEnd = hasEnd || role === "end";
+      const parsed = metaText ? parseMeta(metaText, ["zone", "color", "max_drones"], role === "hub" ? [] : ["max_drones"]) : { meta: {} };
+      if (parsed.error) return META_ERR(no, parsed.error);
+      const hub = { id: map.nextId++, name, x: Number(x), y: Number(y), role,
+        zone: parsed.meta.zone || "normal", color: parsed.meta.color || "", max: Number(parsed.meta.max_drones || 1) };
+      map.hubs.push(hub);
+      byName.set(name, hub);
+    } else if (prefix === "connection") {
+      const m = rest.match(/^(\S+)(?:\s+(.*))?$/);
+      if (!m) return META_ERR(no, "expected <hub_a>-<hub_b> [metadata]");
+      const dash = m[1].indexOf("-");
+      if (dash < 0) return META_ERR(no, "expected <hub_a>-<hub_b>");
+      const a = m[1].slice(0, dash), b = m[1].slice(dash + 1);
+      for (const n of [a, b]) if (!byName.has(n)) return META_ERR(no, `hub '${n}' is not defined before this line`);
+      if (a === b) return META_ERR(no, `hub '${a}' can't connect to itself`);
+      const key = [a, b].sort().join("\n");
+      if (pairs.has(key)) return META_ERR(no, `duplicate connection '${a}-${b}'`);
+      pairs.add(key);
+      const parsed = m[2] ? parseMeta(m[2], ["max_link_capacity"], []) : { meta: {} };
+      if (parsed.error) return META_ERR(no, parsed.error);
+      map.conns.push({ id: map.nextId++, a: byName.get(a).id, b: byName.get(b).id, cap: Number(parsed.meta.max_link_capacity || 1) });
+    } else {
+      return META_ERR(no, `unknown line type '${prefix}'`);
+    }
+  }
+  if (!hasStart) return META_ERR(null, "the map has no start_hub");
+  if (!hasEnd) return META_ERR(null, "the map has no end_hub");
+  return { ok: true, map };
+}
+
+function hubLine(h) {
+  const tags = [];
+  if (h.zone !== "normal") tags.push(`zone=${h.zone}`);
+  if (h.color) tags.push(`color=${h.color}`);
+  if (h.role === "hub" && String(h.max) !== "1") tags.push(`max_drones=${h.max}`);
+  const prefix = h.role === "start" ? "start_hub" : h.role === "end" ? "end_hub" : "hub";
+  return `${prefix}: ${h.name} ${h.x} ${h.y}${tags.length ? ` [${tags.join(" ")}]` : ""}`;
+}
+
+function serialize(map) {
+  const out = [];
+  if (map.title && map.title.trim()) out.push(`# ${map.title.trim()}`);
+  out.push(`nb_drones: ${map.nb}`, "");
+  const rank = { start: 0, hub: 1, end: 2 };
+  const hubs = [...map.hubs].sort((p, q) => rank[p.role] - rank[q.role]);
+  hubs.forEach((h) => out.push(hubLine(h)));
+  if (map.conns.length) out.push("");
+  const byId = new Map(map.hubs.map((h) => [h.id, h]));
+  map.conns.forEach((c) => {
+    const cap = String(c.cap) !== "1" ? ` [max_link_capacity=${c.cap}]` : "";
+    out.push(`connection: ${byId.get(c.a).name}-${byId.get(c.b).name}${cap}`);
+  });
+  return out.join("\n") + "\n";
+}
+
+/* Cheapest route from start to end. Priority zones win ties, as the subject asks. */
+function shortestRoute(map) {
+  const start = map.hubs.find((h) => h.role === "start");
+  const end = map.hubs.find((h) => h.role === "end");
+  if (!start || !end || start.zone === "blocked" || end.zone === "blocked") return null;
+  const near = new Map(map.hubs.map((h) => [h.id, []]));
+  const byId = new Map(map.hubs.map((h) => [h.id, h]));
+  map.conns.forEach((c) => { near.get(c.a).push(c.b); near.get(c.b).push(c.a); });
+  const WEIGHT = 1000;
+  const dist = new Map([[start.id, 0]]);
+  const prev = new Map();
+  const done = new Set();
+  for (;;) {
+    let cur = null;
+    dist.forEach((d, id) => { if (!done.has(id) && (cur === null || d < dist.get(cur))) cur = id; });
+    if (cur === null) return null;
+    if (cur === end.id) break;
+    done.add(cur);
+    for (const next of near.get(cur)) {
+      const h = byId.get(next);
+      if (h.zone === "blocked" || done.has(next)) continue;
+      const step = (h.zone === "restricted" ? 2 : 1) * WEIGHT - (h.zone === "priority" ? 1 : 0);
+      const total = dist.get(cur) + step;
+      if (!dist.has(next) || total < dist.get(next)) { dist.set(next, total); prev.set(next, cur); }
+    }
+  }
+  const path = [end.id];
+  while (path[0] !== start.id) path.unshift(prev.get(path[0]));
+  return { path, turns: Math.ceil(dist.get(end.id) / WEIGHT) };
+}
+
+function reachableFromStart(map, start) {
+  const seen = new Set([start.id]);
+  const blocked = new Set(map.hubs.filter((h) => h.zone === "blocked").map((h) => h.id));
+  const queue = [start.id];
+  while (queue.length) {
+    const cur = queue.pop();
+    for (const c of map.conns) {
+      const next = c.a === cur ? c.b : c.b === cur ? c.a : null;
+      if (next !== null && !seen.has(next) && !blocked.has(next)) { seen.add(next); queue.push(next); }
+    }
+  }
+  return seen;
+}
+
+/* errors: your parser must reject the file. warnings: the file is valid but worth a look. */
+function checkMap(map) {
+  const errors = [], warnings = [];
+  const hubRef = (h) => ({ type: "hub", id: h.id });
+  if (!isPosInt(map.nb)) errors.push({ msg: "nb_drones must be a positive integer." });
+  const starts = map.hubs.filter((h) => h.role === "start");
+  const ends = map.hubs.filter((h) => h.role === "end");
+  if (starts.length !== 1) errors.push({ msg: starts.length ? "There must be only one start hub." : "Set one hub as Start." });
+  if (ends.length !== 1) errors.push({ msg: ends.length ? "There must be only one end hub." : "Set one hub as End." });
+  const names = new Map();
+  map.hubs.forEach((h) => {
+    const label = h.name || "(unnamed)";
+    if (!h.name) errors.push({ msg: "A hub has no name.", ref: hubRef(h) });
+    else if (/[-\s]/.test(h.name)) errors.push({ msg: `'${label}': names can't contain dashes or spaces.`, ref: hubRef(h) });
+    if (h.name && names.has(h.name)) errors.push({ msg: `'${label}': this name is already used.`, ref: hubRef(h) });
+    names.set(h.name, h);
+    if (!isInt(h.x) || !isInt(h.y)) errors.push({ msg: `'${label}': x and y must be integers.`, ref: hubRef(h) });
+    if (h.role === "hub" && !isPosInt(h.max)) errors.push({ msg: `'${label}': max_drones must be a positive integer.`, ref: hubRef(h) });
+    if (h.color && /[\s\[\]=]/.test(h.color)) errors.push({ msg: `'${label}': color must be one word.`, ref: hubRef(h) });
+    if (h.zone === "blocked" && h.role !== "hub") warnings.push({ msg: `'${label}': a blocked ${h.role} hub makes the map unsolvable.`, ref: hubRef(h) });
+  });
+  const byId = new Map(map.hubs.map((h) => [h.id, h]));
+  const pairs = new Set();
+  map.conns.forEach((c) => {
+    const ref = { type: "conn", id: c.id };
+    const key = [c.a, c.b].sort().join("-");
+    if (pairs.has(key)) errors.push({ msg: "A connection appears twice.", ref });
+    pairs.add(key);
+    if (!isPosInt(c.cap)) errors.push({ msg: `${byId.get(c.a).name}-${byId.get(c.b).name}: max_link_capacity must be a positive integer.`, ref });
+  });
+  const spots = new Map();
+  map.hubs.forEach((h) => {
+    const key = `${h.x},${h.y}`;
+    if (spots.has(key)) warnings.push({ msg: `'${h.name}' and '${spots.get(key).name}' share the point (${key}).`, ref: hubRef(h) });
+    else spots.set(key, h);
+  });
+  const route = starts.length === 1 && ends.length === 1 ? shortestRoute(map) : null;
+  if (starts.length === 1 && ends.length === 1 && !route) {
+    warnings.push({ msg: "No path links start to end. This parses, but your program must report it clearly." });
+  }
+  if (starts.length === 1) {
+    const seen = reachableFromStart(map, starts[0]);
+    map.hubs.forEach((h) => {
+      if (!seen.has(h.id) && h.zone !== "blocked" && h.role !== "end") warnings.push({ msg: `'${h.name}' can't be reached from start.`, ref: hubRef(h) });
+    });
+  }
+  return { errors, warnings, route };
+}
+</script>
+<script>
+const SAMPLE = `# Example: priority puzzle
+nb_drones: 5
+
+start_hub: start 0 0 [color=green]
+hub: slow_path1 1 -1 [zone=restricted color=red]
+hub: slow_path2 2 -1 [color=red]
+hub: fast_junction 1 0 [zone=priority color=blue max_drones=2]
+hub: fast_path 2 0 [zone=priority color=blue]
+hub: merge_point 3 0 [color=yellow max_drones=3]
+end_hub: goal 4 0 [color=green]
+
+connection: start-slow_path1
+connection: start-fast_junction
+connection: slow_path1-slow_path2
+connection: slow_path2-merge_point
+connection: fast_junction-fast_path
+connection: fast_path-merge_point
+connection: merge_point-goal [max_link_capacity=2]
+`;
+const COLORS = ["red", "orange", "gold", "yellow", "lime", "green", "cyan", "blue", "purple", "magenta", "brown", "gray", "black"];
+const DRAFT_KEY = "flyin-plotter-draft";
+const NS = "http://www.w3.org/2000/svg";
+const R = 15;
+const $ = (id) => document.getElementById(id);
+const svg = $("svg");
+
+let state = parseMap(SAMPLE).map;
+let view = { cx: 0, cy: 0, k: 60 };
+let selection = null;
+let tool = "select";
+let linkFrom = null;
+let rubber = null;
+let gesture = null;
+let undoStack = [], redoStack = [], lastKey = null;
+let keySerial = 0;
+let lastChecks = { errors: [], warnings: [], route: null };
+
+/* ---------- state ---------- */
+function mutate(fn, key) {
+  if (!key || key !== lastKey) {
+    undoStack.push(JSON.stringify(state));
+    if (undoStack.length > 200) undoStack.shift();
+  }
+  lastKey = key || null;
+  redoStack = [];
+  fn();
+  refresh();
+}
+function restore(from, to) {
+  if (!from.length) return;
+  to.push(JSON.stringify(state));
+  state = JSON.parse(from.pop());
+  lastKey = null;
+  if (selection && !findSelected()) selection = null;
+  linkFrom = null;
+  syncTop();
+  renderInspector();
+  refresh();
+}
+function findHub(id) { return state.hubs.find((h) => h.id === id); }
+function findSelected() {
+  if (!selection) return null;
+  return selection.type === "hub" ? findHub(selection.id) : state.conns.find((c) => c.id === selection.id);
+}
+function select(sel) { selection = sel; renderInspector(); renderChart(); }
+function setTool(next) {
+  tool = next;
+  linkFrom = null; rubber = null;
+  document.querySelectorAll("[data-tool]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tool === tool)));
+  say({ select: "Drag a hub to move it. Drag empty space to pan.", hub: "Click the grid to place a hub.", link: "Drag from one hub to another, or click both." }[tool], false);
+  renderChart();
+}
+function say(text, flash = true) {
+  const el = $("status");
+  el.textContent = text;
+  el.classList.toggle("flash", flash);
+}
+function saveDraft() {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) { /* the map still works without a draft */ }
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return false;
+    const m = JSON.parse(raw);
+    if (!Array.isArray(m.hubs) || !Array.isArray(m.conns) || !m.nextId) return false;
+    state = m;
+    return true;
+  } catch (e) { return false; }
+}
+function freeName() {
+  const used = new Set(state.hubs.map((h) => h.name));
+  let n = 1;
+  while (used.has(`hub${n}`)) n++;
+  return `hub${n}`;
+}
+function addHub(x, y) {
+  /* A map needs a start and an end, so the first hubs placed fill those roles. */
+  const missing = (role) => !state.hubs.some((h) => h.role === role);
+  const role = missing("start") ? "start" : missing("end") ? "end" : "hub";
+  const name = role !== "hub" && !state.hubs.some((h) => h.name === role) ? role : freeName();
+  const hub = { id: state.nextId, name, x, y, role, zone: "normal", color: "", max: 1 };
+  mutate(() => { state.nextId++; state.hubs.push(hub); });
+  select({ type: "hub", id: hub.id });
+  const next = { start: " Click again to place the end hub.", end: " Press L, then drag between hubs to connect them.", hub: "" }[role];
+  say(`Placed ${name} at (${x}, ${y}).${next}`);
+}
+function addLink(a, b) {
+  if (a === b) { say("A hub can't connect to itself."); return; }
+  if (state.conns.some((c) => (c.a === a && c.b === b) || (c.a === b && c.b === a))) { say("These hubs are already connected."); return; }
+  const conn = { id: state.nextId, a, b, cap: 1 };
+  mutate(() => { state.nextId++; state.conns.push(conn); });
+  select({ type: "conn", id: conn.id });
+  say(`Connected ${findHub(a).name} to ${findHub(b).name}.`);
+}
+function removeSelected() {
+  const item = findSelected();
+  if (!item) return;
+  const sel = selection;
+  mutate(() => {
+    if (sel.type === "hub") {
+      state.hubs = state.hubs.filter((h) => h.id !== sel.id);
+      state.conns = state.conns.filter((c) => c.a !== sel.id && c.b !== sel.id);
+    } else {
+      state.conns = state.conns.filter((c) => c.id !== sel.id);
+    }
+  });
+  select(null);
+  say("Deleted. Undo brings it back.");
+}
+
+/* ---------- geometry ---------- */
+function size() { const r = svg.getBoundingClientRect(); return { w: r.width || 800, h: r.height || 600 }; }
+function toScreen(x, y) { const { w, h } = size(); return { x: w / 2 + (Number(x) - view.cx) * view.k, y: h / 2 - (Number(y) - view.cy) * view.k }; }
+function toWorld(px, py) { const { w, h } = size(); return { x: view.cx + (px - w / 2) / view.k, y: view.cy - (py - h / 2) / view.k }; }
+function local(e) { const r = svg.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function hubAt(p) {
+  let best = null, bestD = (R + 6) * (R + 6);
+  for (const h of state.hubs) {
+    const s = toScreen(h.x, h.y);
+    const d = (s.x - p.x) ** 2 + (s.y - p.y) ** 2;
+    if (d <= bestD) { best = h; bestD = d; }
+  }
+  return best;
+}
+function fitView() {
+  const { w, h } = size();
+  if (!state.hubs.length) { view = { cx: 0, cy: 0, k: 60 }; renderChart(); return; }
+  const xs = state.hubs.map((n) => Number(n.x) || 0), ys = state.hubs.map((n) => Number(n.y) || 0);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const railRoom = 150;
+  const k = Math.min((w - railRoom * 2) / Math.max(x1 - x0, 1), (h - 150) / Math.max(y1 - y0, 1), 110);
+  view = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, k: Math.max(k, 18) };
+  renderChart();
+}
+function zoomAt(p, factor) {
+  const before = toWorld(p.x, p.y);
+  view.k = Math.min(180, Math.max(14, view.k * factor));
+  const after = toWorld(p.x, p.y);
+  view.cx += before.x - after.x;
+  view.cy += before.y - after.y;
+  renderChart();
+}
+
+/* ---------- drawing ---------- */
+function el(name, attrs, parent, text) {
+  const n = document.createElementNS(NS, name);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function polygon(sides, r, rot) {
+  const pts = [];
+  for (let i = 0; i < sides; i++) {
+    const a = rot + (i * 2 * Math.PI) / sides;
+    pts.push(`${(r * Math.cos(a)).toFixed(1)},${(r * Math.sin(a)).toFixed(1)}`);
+  }
+  return pts.join(" ");
+}
+const SYSTEM_COLORS = { red: "#ff3b30", orange: "#ff9500", gold: "#ffcc00", yellow: "#ffd60a", lime: "#a4e04b", green: "#34c759",
+  cyan: "#32ade6", blue: "#007aff", purple: "#af52de", magenta: "#ff2d92", brown: "#a2845e", gray: "#8e8e93", black: "#1c1c1e" };
+const shade = (c) => SYSTEM_COLORS[String(c).toLowerCase()] || c;
+function usableColor(c) { return c && window.CSS && CSS.supports("color", c); }
+function zoneShape(zone, parent, color) {
+  const cls = `h-body ${zone}${usableColor(color) ? "" : " none"}`;
+  const fill = usableColor(color) ? { fill: shade(color) } : {};
+  if (zone === "priority") el("polygon", { class: cls, points: polygon(4, R + 3, 0), ...fill }, parent);
+  else if (zone === "restricted") {
+    el("circle", { class: "h-restrict", r: R + 5 }, parent);
+    el("polygon", { class: cls, points: polygon(6, R, 0), ...fill }, parent);
+  } else if (zone === "blocked") {
+    el("rect", { class: cls, x: -R + 2, y: -R + 2, width: 2 * R - 4, height: 2 * R - 4, ...fill }, parent);
+    const d = R - 6;
+    el("line", { class: "h-x", x1: -d, y1: -d, x2: d, y2: d }, parent);
+    el("line", { class: "h-x", x1: -d, y1: d, x2: d, y2: -d }, parent);
+  } else el("circle", { class: cls, r: R, ...fill }, parent);
+}
+function renderGrid(root) {
+  const { w, h } = size();
+  const tl = toWorld(0, 0), br = toWorld(w, h);
+  const step = view.k < 24 ? 5 : view.k < 40 ? 2 : 1;
+  const x0 = Math.ceil(tl.x / step) * step, y0 = Math.ceil(br.y / step) * step;
+  let minor = "";
+  for (let x = x0; x <= br.x; x += step) { const s = toScreen(x, 0).x; minor += `M${s.toFixed(1)} 0V${h}`; }
+  for (let y = y0; y <= tl.y; y += step) { const s = toScreen(0, y).y; minor += `M0 ${s.toFixed(1)}H${w}`; }
+  el("path", { class: "g-minor", d: minor }, root);
+  const o = toScreen(0, 0);
+  if (o.x >= 0 && o.x <= w) el("line", { class: "g-axis", x1: o.x, y1: 0, x2: o.x, y2: h }, root);
+  if (o.y >= 0 && o.y <= h) el("line", { class: "g-axis", x1: 0, y1: o.y, x2: w, y2: o.y }, root);
+  const labelY = Math.max(14, Math.min(h - 34, o.y + 14));
+  const labelX = Math.max(6, Math.min(w - 26, o.x + 5));
+  for (let x = x0; x <= br.x; x += step) if (x !== 0) el("text", { class: "g-tick", x: toScreen(x, 0).x + 3, y: labelY }, root, String(x));
+  for (let y = y0; y <= tl.y; y += step) if (y !== 0) el("text", { class: "g-tick", x: labelX, y: toScreen(0, y).y - 3 }, root, String(y));
+}
+function renderChart() {
+  svg.replaceChildren();
+  const { w, h } = size();
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.style.cursor = tool === "hub" ? "crosshair" : "default";
+  renderGrid(svg);
+
+  const routeEdges = new Map();
+  if (lastChecks.route) {
+    const p = lastChecks.route.path;
+    for (let i = 1; i < p.length; i++) routeEdges.set([p[i - 1], p[i]].sort((a, b) => a - b).join("-"), p[i - 1]);
+  }
+  for (const c of state.conns) {
+    const a = findHub(c.a), b = findHub(c.b);
+    if (!a || !b) continue;
+    const s = toScreen(a.x, a.y), t = toScreen(b.x, b.y);
+    const cap = Math.min(Math.max(Number(c.cap) || 1, 1), 5);
+    const width = 1.5 + (cap - 1) * 1.5;
+    const g = el("g", {}, svg);
+    const isSel = selection && selection.type === "conn" && selection.id === c.id;
+    const blocked = a.zone === "blocked" || b.zone === "blocked";
+    el("line", { class: `c-line${isSel ? " sel" : ""}${blocked ? " toblocked" : ""}`, x1: s.x, y1: s.y, x2: t.x, y2: t.y, "stroke-width": width }, g);
+    if (routeEdges.has([c.a, c.b].sort((m, n) => m - n).join("-"))) {
+      el("line", { class: "c-route", x1: s.x, y1: s.y, x2: t.x, y2: t.y, "stroke-width": width + 8 }, g);
+      const fwd = routeEdges.get([c.a, c.b].sort((m, n) => m - n).join("-")) === c.a;
+      const [f0, f1] = fwd ? [s, t] : [t, s];
+      el("line", { class: "c-flow", x1: f0.x, y1: f0.y, x2: f1.x, y2: f1.y, "stroke-width": width + 4 }, g);
+    }
+    el("line", { class: "c-hit", "data-conn": c.id, x1: s.x, y1: s.y, x2: t.x, y2: t.y }, g);
+    if (String(c.cap) !== "1") el("text", { class: "badge", x: (s.x + t.x) / 2, y: (s.y + t.y) / 2 - 7 }, g, `×${c.cap}`);
+  }
+  if (linkFrom !== null && rubber) {
+    const f = findHub(linkFrom);
+    if (f) { const s = toScreen(f.x, f.y); el("line", { class: "rubber", x1: s.x, y1: s.y, x2: rubber.x, y2: rubber.y }, svg); }
+  }
+  for (const n of state.hubs) {
+    const s = toScreen(n.x, n.y);
+    const g = el("g", { class: "hub-g", transform: `translate(${s.x.toFixed(1)} ${s.y.toFixed(1)})` }, svg);
+    const isSel = selection && selection.type === "hub" && selection.id === n.id;
+    if (isSel || linkFrom === n.id) el("circle", { class: "halo", r: R + 9 }, g);
+    if (n.role !== "hub") el("circle", { class: "h-ring", r: R + 5 }, g);
+    zoneShape(n.zone, g, n.color);
+    if (n.role !== "hub") el("text", { class: "h-role", y: -(R + 11) }, g, n.role === "start" ? "START" : "END");
+    el("text", { class: "h-name", y: R + 19 }, g, n.name || "(unnamed)");
+    if (n.role === "hub" && String(n.max) !== "1") el("text", { class: "badge", x: R + 9, y: -R + 3 }, g, `×${n.max}`);
+    if (n.zone === "restricted") el("text", { class: "badge turns", x: -(R + 8), y: -R + 3 }, g, "2t");
+  }
+  if (!state.hubs.length) el("text", { class: "empty", x: w / 2, y: h / 2 }, svg, tool === "hub" ? "Click the grid to place your start hub, or drop a map file here." : "Choose Add hub to place your start hub, or drop a map file here.");
+}
+
+/* ---------- side panel ---------- */
+function legendIcon(zone) {
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "-24 -24 48 48");
+  s.setAttribute("aria-hidden", "true");
+  zoneShape(zone, s, "");
+  return s;
+}
+function renderInspector() {
+  const box = $("inspector");
+  const item = findSelected();
+  box.replaceChildren();
+  if (!item) {
+    box.innerHTML = `<h2>Zone types</h2><dl class="legend" id="legend"></dl><p class="note">Select a hub or connection to edit it. A label like ×3 shows a capacity above 1, and thicker lines carry more drones.</p>`;
+    const rows = [["normal", "Normal", "1 turn"], ["priority", "Priority", "1 turn, preferred"], ["restricted", "Restricted", "2 turns"], ["blocked", "Blocked", "never entered"]];
+    const dl = box.querySelector("#legend");
+    rows.forEach(([z, name, text]) => {
+      const dt = document.createElement("dt");
+      dt.appendChild(legendIcon(z));
+      const dd = document.createElement("dd");
+      const b = document.createElement("b");
+      b.textContent = name;
+      dd.append(b, `: ${text}`);
+      dl.append(dt, dd);
+    });
+    return;
+  }
+  if (selection.type === "conn") return renderConnInspector(box, item);
+  renderHubInspector(box, item);
+}
+function renderConnInspector(box, c) {
+  box.innerHTML = `
+    <div class="head"><h2>Connection</h2><button class="btn" id="delItem" type="button">Delete</button></div>
+    <p class="note mono" id="connName"></p>
+    <label class="stack"><span class="label">max_link_capacity</span><input type="number" class="mono" id="connCap" min="1" step="1"></label>
+    <p class="note">How many drones can travel this link in the same turn.</p>`;
+  box.querySelector("#connName").textContent = `${findHub(c.a).name} – ${findHub(c.b).name}`;
+  const cap = box.querySelector("#connCap");
+  cap.value = c.cap;
+  const key = `cap${++keySerial}`;
+  cap.addEventListener("input", () => {
+    const raw = cap.value;
+    mutate(() => { c.cap = isInt(raw) ? Number(raw) : raw; }, key);
+    cap.classList.toggle("bad", !isPosInt(raw));
+  });
+  box.querySelector("#delItem").addEventListener("click", removeSelected);
+}
+function segment(host, options, current, onPick) {
+  options.forEach(([value, text]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = text;
+    b.setAttribute("aria-pressed", String(value === current));
+    b.addEventListener("click", () => onPick(value));
+    host.appendChild(b);
+  });
+}
+function renderHubInspector(box, h) {
+  box.innerHTML = `
+    <div class="head"><h2>Hub</h2><button class="btn" id="delItem" type="button">Delete</button></div>
+    <label class="stack"><span class="label">Name</span><input type="text" class="mono" id="hubName" spellcheck="false" autocomplete="off"></label>
+    <div class="row">
+      <label class="stack"><span class="label">x</span><input type="number" class="mono" id="hubX" step="1"></label>
+      <label class="stack"><span class="label">y</span><input type="number" class="mono" id="hubY" step="1"></label>
+    </div>
+    <div class="stack"><span class="label">Role</span><div class="seg" id="roleSeg"></div></div>
+    <div class="stack"><span class="label">Zone</span><div class="seg" id="zoneSeg"></div></div>
+    <label class="stack"><span class="label">max_drones</span><input type="number" class="mono" id="hubMax" min="1" step="1"></label>
+    <p class="note" id="maxNote" hidden>Start and end hubs have no limit, so this isn't exported.</p>
+    <div class="stack">
+      <label class="label" for="hubColor">Color</label>
+      <input type="text" class="mono" id="hubColor" spellcheck="false" autocomplete="off" placeholder="none">
+      <div class="swatches" id="swatches"></div>
+    </div>`;
+  const q = (s) => box.querySelector(s);
+  const name = q("#hubName"), x = q("#hubX"), y = q("#hubY"), max = q("#hubMax"), color = q("#hubColor");
+  name.value = h.name; x.value = h.x; y.value = h.y; max.value = h.max; color.value = h.color;
+  max.disabled = h.role !== "hub";
+  q("#maxNote").hidden = h.role === "hub";
+  const serial = ++keySerial;
+  name.addEventListener("input", () => {
+    mutate(() => { h.name = name.value.trim(); }, `name${serial}`);
+    name.classList.toggle("bad", !h.name || /[-\s]/.test(h.name));
+  });
+  const coord = (input, prop) => input.addEventListener("input", () => {
+    const raw = input.value;
+    mutate(() => { h[prop] = isInt(raw) ? Number(raw) : raw; }, `${prop}${serial}`);
+    input.classList.toggle("bad", !isInt(raw));
+  });
+  coord(x, "x"); coord(y, "y");
+  max.addEventListener("input", () => {
+    const raw = max.value;
+    mutate(() => { h.max = isInt(raw) ? Number(raw) : raw; }, `max${serial}`);
+    max.classList.toggle("bad", !isPosInt(raw));
+  });
+  color.addEventListener("input", () => {
+    mutate(() => { h.color = color.value.trim(); }, `color${serial}`);
+    color.classList.toggle("bad", /[\s\[\]=]/.test(color.value.trim()));
+  });
+  segment(q("#roleSeg"), [["hub", "Hub"], ["start", "Start"], ["end", "End"]], h.role, (role) => {
+    mutate(() => {
+      if (role !== "hub") state.hubs.forEach((o) => { if (o.role === role) o.role = "hub"; });
+      h.role = role;
+    });
+    renderInspector();
+  });
+  segment(q("#zoneSeg"), [["normal", "Normal"], ["priority", "Priority"], ["restricted", "Restricted"], ["blocked", "Blocked"]], h.zone, (zone) => {
+    mutate(() => { h.zone = zone; });
+    renderInspector();
+  });
+  const swatches = q("#swatches");
+  const none = document.createElement("button");
+  none.type = "button"; none.className = "swatch none"; none.textContent = "∅";
+  none.setAttribute("aria-label", "No color"); none.title = "No color";
+  none.addEventListener("click", () => { mutate(() => { h.color = ""; }); renderInspector(); });
+  swatches.appendChild(none);
+  COLORS.forEach((c) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "swatch"; b.style.background = shade(c); b.title = c;
+    b.setAttribute("aria-label", c);
+    b.addEventListener("click", () => { mutate(() => { h.color = c; }); renderInspector(); });
+    swatches.appendChild(b);
+  });
+  q("#delItem").addEventListener("click", removeSelected);
+}
+function renderChecks() {
+  const { errors, warnings, route } = lastChecks;
+  const list = $("checks");
+  list.replaceChildren();
+  const add = (sev, word, c) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    if (c.ref) { b.className = "link"; b.addEventListener("click", () => select(c.ref)); } else { b.tabIndex = -1; }
+    const s = document.createElement("span");
+    s.className = `sev ${sev}`; s.textContent = word;
+    const t = document.createElement("span");
+    t.textContent = c.msg;
+    b.append(s, t);
+    li.appendChild(b);
+    list.appendChild(li);
+  };
+  errors.forEach((c) => add("err", "Error", c));
+  warnings.forEach((c) => add("warn", "Check", c));
+  list.hidden = !errors.length && !warnings.length;
+  const v = $("verdict");
+  if (errors.length) { v.className = "pill err"; v.textContent = `${errors.length} error${errors.length > 1 ? "s" : ""}`; }
+  else if (warnings.length) { v.className = "pill warn"; v.textContent = "Valid, see notes"; }
+  else { v.className = "pill ok"; v.textContent = "Valid map"; }
+  $("statHubs").textContent = state.hubs.length;
+  $("statLinks").textContent = state.conns.length;
+  $("statTurns").textContent = route ? route.turns : "–";
+  $("routeText").textContent = route ? route.path.map((id) => findHub(id).name).join(" → ") : "";
+  $("routeText").hidden = !route;
+}
+function syncTop() {
+  $("mapTitle").value = state.title || "";
+  $("nbDrones").value = state.nb;
+  $("nbDrones").classList.toggle("bad", !isPosInt(state.nb));
+}
+function refresh() {
+  lastChecks = checkMap(state);
+  $("output").value = serialize(state);
+  $("undo").disabled = !undoStack.length;
+  $("redo").disabled = !redoStack.length;
+  renderChart();
+  renderChecks();
+  saveDraft();
+}
+
+/* ---------- pointer ---------- */
+svg.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  const p = local(e);
+  const hub = hubAt(p);
+  const connEl = e.target.closest && e.target.closest("[data-conn]");
+  const panFrom = { type: "pan", sx: p.x, sy: p.y, cx: view.cx, cy: view.cy, moved: false };
+  svg.setPointerCapture(e.pointerId);
+  if (tool === "link") {
+    if (hub) {
+      if (linkFrom !== null && linkFrom !== hub.id) { const from = linkFrom; linkFrom = null; rubber = null; addLink(from, hub.id); gesture = null; return; }
+      linkFrom = hub.id; rubber = p;
+      gesture = { type: "link", from: hub.id, sx: p.x, sy: p.y, moved: false };
+      renderChart();
+      return;
+    }
+    linkFrom = null; rubber = null;
+    gesture = panFrom;
+    renderChart();
+    return;
+  }
+  if (hub) {
+    select({ type: "hub", id: hub.id });
+    gesture = { type: "drag", id: hub.id, key: `drag${++keySerial}` };
+    return;
+  }
+  if (connEl && tool === "select") { select({ type: "conn", id: Number(connEl.dataset.conn) }); gesture = null; return; }
+  gesture = { ...panFrom, place: tool === "hub", clear: tool === "select" };
+});
+svg.addEventListener("pointermove", (e) => {
+  const p = local(e);
+  const w = toWorld(p.x, p.y);
+  $("cursor").textContent = `x ${Math.round(w.x)}  y ${Math.round(w.y)}`;
+  if (linkFrom !== null) { rubber = p; if (!gesture) renderChart(); }
+  if (!gesture) return;
+  if (gesture.type === "pan") {
+    if (Math.hypot(p.x - gesture.sx, p.y - gesture.sy) > 4) gesture.moved = true;
+    if (gesture.moved) {
+      view.cx = gesture.cx - (p.x - gesture.sx) / view.k;
+      view.cy = gesture.cy + (p.y - gesture.sy) / view.k;
+      renderChart();
+    }
+  } else if (gesture.type === "drag") {
+    const h = findHub(gesture.id);
+    const x = Math.round(w.x), y = Math.round(w.y);
+    if (h && (h.x !== x || h.y !== y)) {
+      mutate(() => { h.x = x; h.y = y; }, gesture.key);
+      const fx = $("hubX"), fy = $("hubY");
+      if (fx) fx.value = x;
+      if (fy) fy.value = y;
+    }
+  } else if (gesture.type === "link") {
+    if (Math.hypot(p.x - gesture.sx, p.y - gesture.sy) > 6) gesture.moved = true;
+    renderChart();
+  }
+});
+function endGesture(e) {
+  const g = gesture;
+  gesture = null;
+  if (!g) return;
+  const p = local(e);
+  if (g.type === "link" && g.moved) {
+    const target = hubAt(p);
+    linkFrom = null; rubber = null;
+    if (target && target.id !== g.from) addLink(g.from, target.id);
+    else renderChart();
+  } else if (g.type === "pan" && !g.moved) {
+    if (g.place) {
+      const w = toWorld(p.x, p.y);
+      addHub(Math.round(w.x), Math.round(w.y));
+    } else if (g.clear) select(null);
+  }
+}
+svg.addEventListener("pointerup", endGesture);
+svg.addEventListener("pointercancel", () => { gesture = null; linkFrom = null; rubber = null; renderChart(); });
+svg.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  zoomAt(local(e), e.deltaY < 0 ? 1.12 : 1 / 1.12);
+}, { passive: false });
+
+/* ---------- controls ---------- */
+document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
+$("undo").addEventListener("click", () => restore(undoStack, redoStack));
+$("redo").addEventListener("click", () => restore(redoStack, undoStack));
+$("zoomIn").addEventListener("click", () => { const { w, h } = size(); zoomAt({ x: w / 2, y: h / 2 }, 1.25); });
+$("zoomOut").addEventListener("click", () => { const { w, h } = size(); zoomAt({ x: w / 2, y: h / 2 }, 0.8); });
+$("fit").addEventListener("click", fitView);
+$("newMap").addEventListener("click", () => {
+  mutate(() => { state = { title: "", nb: 1, hubs: [], conns: [], nextId: 1 }; });
+  selection = null;
+  syncTop(); renderInspector(); fitView();
+  setTool("hub");
+  say("New map started. Undo brings the old one back.");
+});
+const titleKey = "title";
+$("mapTitle").addEventListener("input", () => { const v = $("mapTitle").value; mutate(() => { state.title = v; }, titleKey); });
+$("mapTitle").addEventListener("blur", () => { lastKey = null; });
+$("nbDrones").addEventListener("input", () => {
+  const raw = $("nbDrones").value;
+  mutate(() => { state.nb = isInt(raw) ? Number(raw) : raw; }, "nb");
+  $("nbDrones").classList.toggle("bad", !isPosInt(raw));
+});
+$("nbDrones").addEventListener("blur", () => { lastKey = null; });
+
+window.addEventListener("keydown", (e) => {
+  const typing = e.target.matches && e.target.matches("input, textarea, select");
+  if (e.key === "Escape") {
+    if (!$("importModal").hidden) { closeImport(); return; }
+    linkFrom = null; rubber = null;
+    if (!typing) select(null);
+    return;
+  }
+  if (!$("importModal").hidden) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); if (!$("save").hidden) $("save").click(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); openImport(); return; }
+  if (typing) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); restore(e.shiftKey ? redoStack : undoStack, e.shiftKey ? undoStack : redoStack); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); restore(redoStack, undoStack); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "v") setTool("select");
+  else if (k === "h") setTool("hub");
+  else if (k === "l") setTool("link");
+  else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeSelected(); }
+  else if (e.key.startsWith("Arrow") && selection && selection.type === "hub") {
+    e.preventDefault();
+    const h = findSelected();
+    const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+    const dy = e.key === "ArrowDown" ? -1 : e.key === "ArrowUp" ? 1 : 0;
+    mutate(() => { h.x = (Number(h.x) || 0) + dx; h.y = (Number(h.y) || 0) + dy; });
+    renderInspector();
+  }
+});
+
+/* ---------- map file ---------- */
+function fileName() {
+  const slug = (state.title || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return `${slug || "flyin_map"}.txt`;
+}
+$("copy").addEventListener("click", () => {
+  const out = $("output");
+  const fallback = () => { out.focus(); out.select(); say("Press Ctrl+C to copy the selected text."); };
+  if (!navigator.clipboard) { fallback(); return; }
+  navigator.clipboard.writeText(out.value).then(() => say("Copied the map file."), fallback);
+});
+let downloads = null;
+$("save").addEventListener("click", async () => {
+  const data = $("output").value;
+  const filename = fileName();
+  if (!downloads) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([data], { type: "text/plain" }));
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  }
+  try {
+    await downloads.save({ filename, data });
+    say(`Saved ${filename}.`);
+  } catch (err) {
+    if (err && err.code === "declined") say("Save cancelled.");
+    else if (err && err.code === "rate_limited") say("A save prompt is already open.");
+    else { say("Saving isn't available here. Use Copy instead."); $("save").hidden = true; }
+  }
+});
+if (window.claude && window.claude.use) {
+  window.claude.use("downloads").then((d) => { downloads = d; $("save").hidden = !d; });
+} else {
+  $("save").hidden = false;
+}
+
+let importTitle = "";
+function openImport() { $("importError").hidden = true; $("importModal").hidden = false; $("importText").focus(); }
+function closeImport() { $("importModal").hidden = true; $("importFile").value = ""; importTitle = ""; }
+/* Loads straight away when the text is valid. Otherwise it opens the dialog with the text and the reason. */
+function loadMapText(text, title) {
+  const res = parseMap(text);
+  if (!res.ok) {
+    importTitle = title;
+    $("importText").value = text;
+    openImport();
+    const err = $("importError");
+    err.textContent = res.line ? `Line ${res.line}: ${res.msg}.` : `This map can't load: ${res.msg}.`;
+    err.hidden = false;
+    return;
+  }
+  if (!res.map.title) res.map.title = title;
+  mutate(() => { state = res.map; });
+  selection = null;
+  $("importText").value = "";
+  closeImport();
+  syncTop(); renderInspector(); setTool("select"); fitView();
+  const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  say(`Imported ${count(state.hubs.length, "hub")} and ${count(state.conns.length, "connection")}.`);
+}
+function readMapFile(file) {
+  if (file.size > 1e6) { say(`${file.name} is too large to be a map file.`); return; }
+  const reader = new FileReader();
+  reader.onload = () => loadMapText(String(reader.result), file.name.replace(/\.[^.]*$/, ""));
+  reader.onerror = () => say(`Couldn't read ${file.name}.`);
+  reader.readAsText(file);
+}
+$("openImport").addEventListener("click", openImport);
+$("importCancel").addEventListener("click", closeImport);
+$("importFile").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) readMapFile(file);
+});
+$("importGo").addEventListener("click", () => loadMapText($("importText").value, importTitle));
+
+const hasFile = (e) => e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
+window.addEventListener("dragover", (e) => {
+  if (!hasFile(e)) return;
+  e.preventDefault();
+  document.body.classList.add("dropping");
+});
+window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dropping"); });
+window.addEventListener("drop", (e) => {
+  document.body.classList.remove("dropping");
+  if (!hasFile(e)) return;
+  e.preventDefault();
+  if (e.dataTransfer.files[0]) readMapFile(e.dataTransfer.files[0]);
+});
+document.addEventListener("paste", (e) => {
+  if (!$("importModal").hidden || (e.target.matches && e.target.matches("input, textarea, select"))) return;
+  const text = e.clipboardData && e.clipboardData.getData("text");
+  if (text && text.trim()) { e.preventDefault(); loadMapText(text, ""); }
+});
+
+/* ---------- start ---------- */
+const hadDraft = loadDraft();
+syncTop();
+renderInspector();
+refresh();
+setTool("select");
+fitView();
+say(hadDraft ? "Restored your last map. Press New to start empty." : "This is an example map. Edit it, press New to start empty, or drop a .txt file to open it.", false);
+new ResizeObserver(() => renderChart()).observe(svg);
+</script>
+</body>
+</html>
