@@ -2,6 +2,12 @@
 
 Visual map editor for the Fly-in project: place hubs, connect them, check the map and export the `.txt` file.
 
+![Editor with the example map, a selected hub and the shortest route highlighted](screenshots/editor-light.png)
+
+The theme follows your system's light or dark setting:
+
+![Editor in dark theme, showing the zone types, map checks and generated map file](screenshots/editor-dark.png)
+
 ## Run
 Double-click `fly-in-map-plotter.html`. No installation or internet connection needed.
 
